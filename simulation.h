@@ -23,10 +23,10 @@ typedef struct {
 
 typedef struct {
 
-    int* printers;
-    int* scanners;
-    int* modems;
-    int* CDs;
+    int N_printers;
+    int N_scanners;
+    int N_modems;
+    int N_CDs;
 
 } IOSim;
 
@@ -36,7 +36,7 @@ typedef struct {
 typedef struct {
 
     int arrival_time;
-    int priortiy;
+    int priority;
 
     int allocated_exec_time; //Processor Time it wants (In seconds)
     int proc_size_in_mem; // In MB
@@ -44,3 +44,5 @@ typedef struct {
     IOSim io;
 
 } ProcSimulation; //Process Simulation
+
+ProcSimulation* readProcessesFromFile(const char* filename, int* count);
