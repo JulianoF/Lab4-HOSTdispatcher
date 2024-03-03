@@ -1,6 +1,8 @@
 #include <stdio.h>
 
-//TODO: Idk if we need this ExecSim struct tbh
+
+
+
 //From Lab 4 doc: 2)
 //* Process ID, priority, processor time remaining (in seconds), memory location. block size, and resources requested
 
@@ -30,13 +32,22 @@ typedef struct {
 
 } IOSim;
 
+typedef struct {
 
-//<arrival time>, <priority>, <processor time>, <Mbytes>, <#printers>, <#scanners>, <#modems>, <#CDs>
+    int level; //0 realtime, 1,2,3 prority lists
+    int quantum; // Milliseconds
+
+} Priority;
+
+
+
+
+//* <arrival time>, <priority>, <processor time>, <Mbytes>, <#printers>, <#scanners>, <#modems>, <#CDs>
 
 typedef struct {
 
     int arrival_time;
-    int priority;
+    Priority priority;
 
     int allocated_exec_time; //Processor Time it wants (In seconds)
     int proc_size_in_mem; // In MB
@@ -46,3 +57,5 @@ typedef struct {
 } ProcSimulation; //Process Simulation
 
 ProcSimulation* readProcessesFromFile(const char* filename, int* count);
+
+int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count);
