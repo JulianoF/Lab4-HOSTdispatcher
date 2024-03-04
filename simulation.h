@@ -1,6 +1,7 @@
 #include <stdio.h>
-
-
+#include <unistd.h> // For usleep
+#include <stdlib.h>
+#include <string.h>
 
 
 //From Lab 4 doc: 2)

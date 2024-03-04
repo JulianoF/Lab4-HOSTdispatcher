@@ -1,15 +1,9 @@
-#include <stdlib.h>
-#include <string.h>
-
 #include "simulation.h"
 
-#include <stdlib.h>
-#include <string.h>
 
 //* Priorities Definition
 
 //sets a quantum for a given priority ptr
-
 void setQuantum(Priority* priority) {
     switch (priority->level) {
         case 0:
@@ -75,8 +69,30 @@ ProcSimulation* readProcessesFromFile(const char* filename, int* count) {
     return processes;
 }
 
-
 //* ------------------- Queue Logic --------------------
+
+ProcSimulation* popFromQueue(ProcSimulation **queue, int *size) {
+    if (*size == 0) { //If queue is empty, return NULL
+        return NULL;
+    }
+
+    //* Deref size int, and decrement it
+    (*size)--;
+
+    ProcSimulation* poppedElement = (ProcSimulation*)malloc(sizeof(ProcSimulation)); //Allocate Pop elm obj
+
+    if (poppedElement == NULL) {
+        fprintf(stderr, "Memory allocation failed for Popped Element...\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Copy the last element to the temporary ProcSimulation
+    *poppedElement = (*queue)[*size];
+
+    //todo: shrink queue obj?
+
+    return poppedElement;
+}
 
 void addToQueue(ProcSimulation **queue, int *size, ProcSimulation process) {
     ProcSimulation *temp = realloc(*queue, (*size + 1) * sizeof(ProcSimulation));
@@ -116,28 +132,71 @@ int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count) {
         return EXIT_FAILURE;
     }
 
-    ProcSimulation *UserJobQueue = NULL;
+    ProcSimulation *p1Queue = NULL;
+    ProcSimulation *p2Queue = NULL;
+    ProcSimulation *p3Queue = NULL;
+
     ProcSimulation *RealTimeQueue = NULL;
+    int p1Count = 0, p2Count = 0, p3Count = 0, RealTimeCount = 0;
 
-    int UserJobCount = 0, RealTimeCount = 0;
 
-    // Sort jobDispatchList into queues
+    int ACTIVE_TASKS_COUNT;
+
+    // Sort jobDispatchList into queues based on priority levels
     for (int i = 0; i < *count; i++) {
-        if (JobDispatchlist[i].priority.level == 0) {
-            addToQueue(&RealTimeQueue, &RealTimeCount, JobDispatchlist[i]);
-        } else {
-            addToQueue(&UserJobQueue, &UserJobCount, JobDispatchlist[i]);
+        int pLevel = JobDispatchlist[i].priority.level; // Assuming priority level is accessed this way
+        ACTIVE_TASKS_COUNT++;
+
+        switch(pLevel) {
+            case 0:
+                addToQueue(&RealTimeQueue, &RealTimeCount, JobDispatchlist[i]);
+                break;
+            case 1:
+                addToQueue(&p1Queue, &p1Count, JobDispatchlist[i]);
+                break;
+            case 2:
+                addToQueue(&p2Queue, &p2Count, JobDispatchlist[i]);
+                break;
+            case 3:
+                addToQueue(&p3Queue, &p3Count, JobDispatchlist[i]);
+                break;
+            default:
+                fprintf(stderr, "Unknown priority level %d\n", pLevel);
+                break;
         }
     }
 
     // Debug print to verify sorting
     printQueue(RealTimeQueue, RealTimeCount, "Real Time Queue");
-    printQueue(UserJobQueue, UserJobCount, "User Job Queue");
+    printQueue(p1Queue, p1Count, "Priority 1 Queue");
+    printQueue(p2Queue, p2Count, "Priority 2 Queue");
+    printQueue(p3Queue, p3Count, "Priority 3 Queue");
+
+
+    //* [------------] Simulation Logic [-------------]
+
+    int MILLISEC_COUNT = 0;
+
+    while (ACTIVE_TASKS_COUNT > 0 ) { //* Keep going as long as their are Processes needing exec
+        if (RealTimeCount > 0) {
+            // Assume processJob is a function that processes one job from the queue
+            //processJob(&RealTimeQueue, &RealTimeCount);
+        } 
+        MILLISEC_COUNT++;
+        //printf("[MS: %d]\n", MILLISEC_COUNT);
+        usleep(1000); // Wait for 1 millisecond before the next iteration
+    }
+
+    //* [----------------------------------------------]
+
 
     // Free the dynamically allocated memory
     free(JobDispatchlist);
-    free(UserJobQueue);
     free(RealTimeQueue);
+
+    free(p1Queue);
+    free(p2Queue);
+    free(p3Queue);
 
     return 0;
 }

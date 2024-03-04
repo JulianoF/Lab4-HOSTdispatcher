@@ -3,12 +3,13 @@
 #include "simulation.h"
 
 
-#define MEMORY_BUFFER_SIZE 1024 //In Bytes ofsource
+#define MAX_MEMORY_BUFFER_SIZE 1024 //In Bytes ofsource
 
 
 
 int main(void) {
 
+    int availableMemory = MAX_MEMORY_BUFFER_SIZE; //Init with max
     int count;
 
     ProcSimulation *JobDispatchlist = readProcessesFromFile("dispatch_list_1", &count);
