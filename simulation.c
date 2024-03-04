@@ -144,13 +144,16 @@ int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count) {
         return EXIT_FAILURE;
     }
 
-    // Initialize queues for each priority
-    ProcSimulation* queues[4] = {NULL, NULL, NULL, NULL}; // RealTimeQueue, p1Queue, p2Queue, p3Queue
-    int queueCounts[4] = {0, 0, 0, 0}; // RealTimeCount, p1Count, p2Count, p3Count
+    // Initialize queues & queue sizes for each priority
+    //* real-time (p0) count, p1 count, p2 count, p3 count
+
+    ProcSimulation* queues[4] = {NULL, NULL, NULL, NULL}; 
+    int queueCounts[4] = {0, 0, 0, 0};
 
     int MILLISEC_COUNT = 0;
     int ACTIVE_TASKS_COUNT = *count;
-    ProcSimulation* currentProcess = NULL;
+
+    ProcSimulation* runningProcessPTR = NULL;
     int currentProcessIndex = -1; // -1 indicates no process is currently running
 
     while (ACTIVE_TASKS_COUNT > 0) {
@@ -164,10 +167,10 @@ int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count) {
         }
 
         // If there's no current process, find the next process to run based on priority
-        if (currentProcess == NULL) {
+        if (runningProcessPTR == NULL) {
             for (int i = 0; i < 4; i++) {
                 if (queueCounts[i] > 0) {
-                    currentProcess = popFromQueue(&queues[i], &queueCounts[i]);
+                    runningProcessPTR = popFromQueue(&queues[i], &queueCounts[i]);
                     currentProcessIndex = i;
                     printf("[t= %dms ] Starting Process with Priority %d\n", MILLISEC_COUNT, i);
                     break;
@@ -175,30 +178,33 @@ int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count) {
             }
         }
 
-        // Execute the current running process
-        if (currentProcess != NULL) {
-            currentProcess->allocated_exec_time--; // Decrement the remaining execution time
+        if (runningProcessPTR != NULL) { //* Process Currently Executing!
+
+            runningProcessPTR->allocated_exec_time--; // Decrement the remaining execution time
             printf("[t= %dms ] Priority %d Process Running | Time Left: %dms\n",
-                   MILLISEC_COUNT, currentProcessIndex, currentProcess->allocated_exec_time);
+                   MILLISEC_COUNT, currentProcessIndex, runningProcessPTR->allocated_exec_time);
 
             // Check if the process has completed
-            if (currentProcess->allocated_exec_time <= 0) {
+            if (runningProcessPTR->allocated_exec_time <= 0) {
                 printf("[t= %dms ] Priority %d Process Completed\n",
                        MILLISEC_COUNT, currentProcessIndex);
-                currentProcess = NULL;
+                runningProcessPTR = NULL;
                 ACTIVE_TASKS_COUNT--;
-            } else if (currentProcess->priority.quantum > 0) { // If not real-time, handle quantum
-                currentProcess->priority.quantum--;
-                if (currentProcess->priority.quantum == 0 && currentProcessIndex < 3) {
+
+            } else if (runningProcessPTR->priority.quantum > 0) { // If not real-time, handle quantum
+                runningProcessPTR->priority.quantum--;
+                if (runningProcessPTR->priority.quantum == 0 && currentProcessIndex < 3) {
                     // Demote process to a lower priority queue if the quantum expires
                     printf("[t= %dms ] Priority %d Process Time Slice Ended | Moving to Lower Priority Queue\n",
                            MILLISEC_COUNT, currentProcessIndex);
-                    currentProcess->priority.level++;
-                    setQuantum(&currentProcess->priority);
-                    addToQueue(&queues[currentProcess->priority.level], &queueCounts[currentProcess->priority.level], *currentProcess);
-                    currentProcess = NULL; // Process demoted, no longer running
+                    runningProcessPTR->priority.level++;
+                    setQuantum(&runningProcessPTR->priority);
+                    addToQueue(&queues[runningProcessPTR->priority.level], &queueCounts[runningProcessPTR->priority.level], *runningProcessPTR);
+                    runningProcessPTR = NULL; // Process demoted, no longer running
                 }
             }
+        } else { // idling state (waiting for tasks)
+             printf("[t= %dms ] Idling ...\n", MILLISEC_COUNT);
         }
 
         MILLISEC_COUNT++;
