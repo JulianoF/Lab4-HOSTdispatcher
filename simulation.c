@@ -121,82 +121,94 @@ void printQueue(ProcSimulation *queue, int size, char *queueName) {
     }
 }
 
+void sortFCFSQueue(ProcSimulation *queue, int size) {
+    int i, j;
+    for (i = 0; i < size-1; i++) {     
+        for (j = 0; j < size-i-1; j++) {
+            if (queue[j].arrival_time < queue[j+1].arrival_time) {
+                // Swap the processes
+                ProcSimulation temp = queue[j];
+                queue[j] = queue[j+1];
+                queue[j+1] = temp;
+            }
+        }
+    }
+}
+
 //* ------------------------------------------------------
 
 
 int simulateDispatcher(ProcSimulation* JobDispatchlist, int* count) {
-    
     if (JobDispatchlist == NULL) {
-        // Handle error if file reading fails
         fprintf(stderr, "Failed to read processes from file.\n");
         return EXIT_FAILURE;
     }
 
-    ProcSimulation *p1Queue = NULL;
-    ProcSimulation *p2Queue = NULL;
-    ProcSimulation *p3Queue = NULL;
-
-    ProcSimulation *RealTimeQueue = NULL;
-    int p1Count = 0, p2Count = 0, p3Count = 0, RealTimeCount = 0;
-
-
-    int ACTIVE_TASKS_COUNT;
-
-    // Sort jobDispatchList into queues based on priority levels
-    for (int i = 0; i < *count; i++) {
-        int pLevel = JobDispatchlist[i].priority.level; // Assuming priority level is accessed this way
-        ACTIVE_TASKS_COUNT++;
-
-        switch(pLevel) {
-            case 0:
-                addToQueue(&RealTimeQueue, &RealTimeCount, JobDispatchlist[i]);
-                break;
-            case 1:
-                addToQueue(&p1Queue, &p1Count, JobDispatchlist[i]);
-                break;
-            case 2:
-                addToQueue(&p2Queue, &p2Count, JobDispatchlist[i]);
-                break;
-            case 3:
-                addToQueue(&p3Queue, &p3Count, JobDispatchlist[i]);
-                break;
-            default:
-                fprintf(stderr, "Unknown priority level %d\n", pLevel);
-                break;
-        }
-    }
-
-    // Debug print to verify sorting
-    printQueue(RealTimeQueue, RealTimeCount, "Real Time Queue");
-    printQueue(p1Queue, p1Count, "Priority 1 Queue");
-    printQueue(p2Queue, p2Count, "Priority 2 Queue");
-    printQueue(p3Queue, p3Count, "Priority 3 Queue");
-
-
-    //* [------------] Simulation Logic [-------------]
+    // Initialize queues for each priority
+    ProcSimulation* queues[4] = {NULL, NULL, NULL, NULL}; // RealTimeQueue, p1Queue, p2Queue, p3Queue
+    int queueCounts[4] = {0, 0, 0, 0}; // RealTimeCount, p1Count, p2Count, p3Count
 
     int MILLISEC_COUNT = 0;
+    int ACTIVE_TASKS_COUNT = *count;
+    ProcSimulation* currentProcess = NULL;
+    int currentProcessIndex = -1; // -1 indicates no process is currently running
 
-    while (ACTIVE_TASKS_COUNT > 0 ) { //* Keep going as long as their are Processes needing exec
-        if (RealTimeCount > 0) {
-            // Assume processJob is a function that processes one job from the queue
-            //processJob(&RealTimeQueue, &RealTimeCount);
-        } 
+    while (ACTIVE_TASKS_COUNT > 0) {
+        // Check for new arrivals and add them to the appropriate queue
+        for (int i = 0; i < *count; i++) {
+            if (JobDispatchlist[i].arrival_time == MILLISEC_COUNT) {
+                int pLevel = JobDispatchlist[i].priority.level;
+                addToQueue(&queues[pLevel], &queueCounts[pLevel], JobDispatchlist[i]);
+                printf("[t= %dms ] New Process with Priority %d Arrived\n", MILLISEC_COUNT, pLevel);
+            }
+        }
+
+        // If there's no current process, find the next process to run based on priority
+        if (currentProcess == NULL) {
+            for (int i = 0; i < 4; i++) {
+                if (queueCounts[i] > 0) {
+                    currentProcess = popFromQueue(&queues[i], &queueCounts[i]);
+                    currentProcessIndex = i;
+                    printf("[t= %dms ] Starting Process with Priority %d\n", MILLISEC_COUNT, i);
+                    break;
+                }
+            }
+        }
+
+        // Execute the current running process
+        if (currentProcess != NULL) {
+            currentProcess->allocated_exec_time--; // Decrement the remaining execution time
+            printf("[t= %dms ] Priority %d Process Running | Time Left: %dms\n",
+                   MILLISEC_COUNT, currentProcessIndex, currentProcess->allocated_exec_time);
+
+            // Check if the process has completed
+            if (currentProcess->allocated_exec_time <= 0) {
+                printf("[t= %dms ] Priority %d Process Completed\n",
+                       MILLISEC_COUNT, currentProcessIndex);
+                currentProcess = NULL;
+                ACTIVE_TASKS_COUNT--;
+            } else if (currentProcess->priority.quantum > 0) { // If not real-time, handle quantum
+                currentProcess->priority.quantum--;
+                if (currentProcess->priority.quantum == 0 && currentProcessIndex < 3) {
+                    // Demote process to a lower priority queue if the quantum expires
+                    printf("[t= %dms ] Priority %d Process Time Slice Ended | Moving to Lower Priority Queue\n",
+                           MILLISEC_COUNT, currentProcessIndex);
+                    currentProcess->priority.level++;
+                    setQuantum(&currentProcess->priority);
+                    addToQueue(&queues[currentProcess->priority.level], &queueCounts[currentProcess->priority.level], *currentProcess);
+                    currentProcess = NULL; // Process demoted, no longer running
+                }
+            }
+        }
+
         MILLISEC_COUNT++;
-        //printf("[MS: %d]\n", MILLISEC_COUNT);
         usleep(1000); // Wait for 1 millisecond before the next iteration
     }
 
-    //* [----------------------------------------------]
-
-
-    // Free the dynamically allocated memory
-    free(JobDispatchlist);
-    free(RealTimeQueue);
-
-    free(p1Queue);
-    free(p2Queue);
-    free(p3Queue);
+    // Free the dynamically allocated memory for queues
+    for (int i = 0; i < 4; i++) {
+        free(queues[i]);
+    }
 
     return 0;
 }
