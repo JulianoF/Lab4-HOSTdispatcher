@@ -286,7 +286,6 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
                     runningProcessPTR = popFromQueueAndCheckResources(&queues[i], &queueCounts[i], IO_AVAILABLE);
 
                     if(runningProcessPTR == NULL) {
-                        printf("NULL SCEN, exit");
                         printf("Available I/O Resources:\nPrinters: %d\nScanners: %d\nModems: %d\nCD Drives: %d\n",
        IO_AVAILABLE->N_printers,
        IO_AVAILABLE->N_scanners,

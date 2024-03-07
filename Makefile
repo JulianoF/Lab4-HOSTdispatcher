@@ -1,6 +1,10 @@
 #Operating Systems Lab 4
 
-hostd: hostd.c utility.c utility.h simulation.h simulation.c
-	gcc hostd.c utility.c simulation.c -o hostd
-clean: hostd.o utility.o simulation.o
-	rm hostd.o utility.o simulation.o hostd
+hostd: hostd.c simulation.h simulation.c
+	gcc hostd.c simulation.c -o hostd
+
+debug: hostd.c simulation.h simulation.c
+	clang -fsanitize=address -O1 -fno-omit-frame-pointer -g hostd.c simulation.c -o hostDEBUG
+
+clean: hostd.o simulation.o
+	rm hostd.o simulation.o hostd hostDEBUG
