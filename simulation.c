@@ -103,6 +103,8 @@ ProcSimulation *popFromQueue(ProcSimulation **queue, int *size)
     return poppedElement;
 }
 
+
+
 void addToQueue(ProcSimulation **queue, int *size, ProcSimulation process)
 {
     ProcSimulation *temp = realloc(*queue, (*size + 1) * sizeof(ProcSimulation));
@@ -115,6 +117,29 @@ void addToQueue(ProcSimulation **queue, int *size, ProcSimulation process)
     (*queue)[*size] = process;
     (*size)++;
 }
+
+ProcSimulation *popFromQueueAndCheckResources(ProcSimulation **queue, int *size, IOSim *io_available) {
+    if (*size == 0) { // If queue is empty, return NULL
+        return NULL;
+    }
+
+    ProcSimulation *poppedElement = popFromQueue(queue, size);
+
+    while (poppedElement != NULL &&
+           (poppedElement->io.N_printers > io_available->N_printers ||
+            poppedElement->io.N_scanners > io_available->N_scanners ||
+            poppedElement->io.N_modems > io_available->N_modems ||
+            poppedElement->io.N_CDs > io_available->N_CDs)) {
+
+        // Resource not available, put the process back in the queue
+        addToQueue(queue, size, *poppedElement);
+        poppedElement = popFromQueue(queue, size);
+    }
+
+    //* IF it gets here, it means all IO Requested is available for this process
+    return poppedElement;
+}
+
 
 void printQueue(ProcSimulation *queue, int size, char *queueName)
 {
@@ -154,34 +179,64 @@ void sortFCFSQueue(ProcSimulation *queue, int size)
 
 //* ------------------------------------------------------
 
-void printWrap(int MS_COUNT, int plevel, int MEM_AVA, const char *format, ...)
+void printWrap(int MS_COUNT, int plevel, int MEM_AVA, const char *format, ...) 
+//... means it can take variable extra params after formatted char* (str)
 {
     va_list args;
     va_start(args, format);
 
-    // Print the initial part of the message
+    // Print Prefix
     printf("[t= %dms ] -- Process Priority: %d -- [MEM AVA: %d ] -- ", MS_COUNT, plevel, MEM_AVA);
 
     // Print the custom part of the message
     vprintf(format, args);
 
-    // Print the newline at the end
     printf("\n");
-
     va_end(args);
+}
+
+void reserveIO(ProcSimulation *pS, IOSim *ioAva) {
+    // Check if enough resources are available
+    if (ioAva->N_printers < pS->io.N_printers ||
+        ioAva->N_scanners < pS->io.N_scanners ||
+        ioAva->N_modems < pS->io.N_modems ||
+        ioAva->N_CDs < pS->io.N_CDs) {
+        fprintf(stderr, "Error: Insufficient resources available for process.\n");
+        return;  // Indicate failure by returning without modification
+    }
+
+    // Reserve resources if sufficient
+    ioAva->N_printers -= pS->io.N_printers;
+    ioAva->N_scanners -= pS->io.N_scanners;
+    ioAva->N_modems -= pS->io.N_modems;
+    ioAva->N_CDs -= pS->io.N_CDs;
+
+    printf("Reserved resources for process: Printers: %d, Scanners: %d, Modems: %d, CDs: %d\n",
+           pS->io.N_printers, pS->io.N_scanners, pS->io.N_modems, pS->io.N_CDs);
+}
+
+void freeIO(ProcSimulation *pS, IOSim *ioAva) {
+    // Free previously reserved resources
+    ioAva->N_printers += pS->io.N_printers;
+    ioAva->N_scanners += pS->io.N_scanners;
+    ioAva->N_modems += pS->io.N_modems;
+    ioAva->N_CDs += pS->io.N_CDs;
+
+    printf("Freed resources for process: Printers: %d, Scanners: %d, Modems: %d, CDs: %d\n",
+           pS->io.N_printers, pS->io.N_scanners, pS->io.N_modems, pS->io.N_CDs);
 }
 
 int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
 {
     if (JobDispatchlist == NULL)
     {
-        fprintf(stderr, "Failed to read processes from file.\n");
+        fprintf(stderr, "[ERROR] Failed to read processes from file.\n");
         return EXIT_FAILURE;
     }
 
-    // Initialize queues & queue sizes for each priority
-    //* real-time (p0) count, p1 count, p2 count, p3 count
-
+    // #### Init queues , Memory & I/O Resources ####
+    
+    //* Real-time, Priority 1, Priority 2, Priority 3
     ProcSimulation *queues[4] = {NULL, NULL, NULL, NULL};
     int queueCounts[4] = {0, 0, 0, 0};
 
@@ -189,6 +244,16 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
     int ACTIVE_TASKS_COUNT = *count;
 
     int MEMORY_AVAILABLE = MEMORY_MAX;
+
+    IOSim *IO_AVAILABLE = (IOSim*)malloc(sizeof(IOSim));
+    
+    IO_AVAILABLE->N_printers = 2;
+    IO_AVAILABLE->N_scanners = 1;
+    IO_AVAILABLE->N_modems = 1;
+    IO_AVAILABLE->N_CDs  = 2;
+
+
+//* ----/ Simulation Below /-----------------------------------------------------------------------------------------
 
     ProcSimulation *runningProcessPTR = NULL;
     int currentProcessIndex = -1; // -1 indicates no process is currently running
@@ -202,21 +267,25 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
             {
                 int pLevel = JobDispatchlist[i].priority.level;
 
-                MEMORY_AVAILABLE -= JobDispatchlist[i].proc_size_in_mem;
+                MEMORY_AVAILABLE -= JobDispatchlist[i].proc_size_in_mem; //Mark that Processes Mem. Size as used
 
                 addToQueue(&queues[pLevel], &queueCounts[pLevel], JobDispatchlist[i]);
-                printWrap(MILLISEC_COUNT, pLevel, MEMORY_AVAILABLE, "Arrived !!!");
+                printWrap(MILLISEC_COUNT, pLevel, MEMORY_AVAILABLE, "[ PROCESS ARRIVED ] ");
             }
         }
 
         // If there's no current process, find the next process to run based on priority
         if (runningProcessPTR == NULL)
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 4; i++) //Check Realtime First "0" before 1, 2, 3
             {
-                if (queueCounts[i] > 0)
+                if (queueCounts[i] > 0) 
                 {
-                    runningProcessPTR = popFromQueue(&queues[i], &queueCounts[i]);
+                    //If this Processes was successfully Popped, we know there is sufficient resources 
+                    runningProcessPTR = popFromQueueAndCheckResources(&queues[i], &queueCounts[i], IO_AVAILABLE);
+
+                    reserveIO(runningProcessPTR, IO_AVAILABLE);
+
                     currentProcessIndex = i;
                     printWrap(MILLISEC_COUNT, currentProcessIndex, MEMORY_AVAILABLE, "Starting Process with Priority %d", currentProcessIndex);
                     break;
@@ -224,30 +293,33 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
             }
         }
 
-        if (runningProcessPTR != NULL)
-        { //* Process Currently Executing!
+        if (runningProcessPTR != NULL) //* Process Currently Executing!
+        { 
 
-            runningProcessPTR->allocated_exec_time--; // Decrement the remaining execution time
+            runningProcessPTR->allocated_exec_time--; // Decrement it's remaining execution time
 
             printWrap(MILLISEC_COUNT, currentProcessIndex, MEMORY_AVAILABLE,
                       "Priority %d Process Running | Time Left: %dms", currentProcessIndex, runningProcessPTR->allocated_exec_time);
 
-            // Check if the process has completed
+            
+            // Process Execution is Complete Branch (Free I/O & Mem Ressources, then Clean-up running process pointer)
             if (runningProcessPTR->allocated_exec_time <= 0)
             {
-
                 MEMORY_AVAILABLE += runningProcessPTR->proc_size_in_mem;
+
+                freeIO(runningProcessPTR, IO_AVAILABLE);
 
                 printWrap(MILLISEC_COUNT, currentProcessIndex, MEMORY_AVAILABLE,
                           "Priority %d Process Completed", currentProcessIndex);
 
-
                 runningProcessPTR = NULL;
                 ACTIVE_TASKS_COUNT--;
             }
-            else if (runningProcessPTR->priority.quantum > 0)
-            { // If not real-time, handle quantum
+            
+            else if (runningProcessPTR->priority.quantum > 0)  // If not real-time, handle quantum & potential demotion
+            { 
                 runningProcessPTR->priority.quantum--;
+
                 if (runningProcessPTR->priority.quantum == 0 && currentProcessIndex < 3)
                 {
 
@@ -262,12 +334,18 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
                 }
             }
         }
-        else
-        { // idling state (waiting for tasks)
+        else //! No Process is Executing Right now (Waiting for Tasks)
+        { 
             printf("[t= %dms ] Idling ... [MEM AVA: %d]\n", MILLISEC_COUNT, MEMORY_AVAILABLE);
         }
 
+        printf("\n"); //For clear seperation of time-blocks in console out
+
         MILLISEC_COUNT++;
+
+        if(MILLISEC_COUNT > 1000) { //! Emergency Break Condition (for debug & Safety)
+            ACTIVE_TASKS_COUNT = 0;
+        }
         usleep(1000); // Wait for 1 millisecond before the next iteration
     }
 
