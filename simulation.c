@@ -282,7 +282,19 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
                 if (queueCounts[i] > 0) 
                 {
                     //If this Processes was successfully Popped, we know there is sufficient resources 
+                    
                     runningProcessPTR = popFromQueueAndCheckResources(&queues[i], &queueCounts[i], IO_AVAILABLE);
+
+                    if(runningProcessPTR == NULL) {
+                        printf("NULL SCEN, exit");
+                        printf("Available I/O Resources:\nPrinters: %d\nScanners: %d\nModems: %d\nCD Drives: %d\n",
+       IO_AVAILABLE->N_printers,
+       IO_AVAILABLE->N_scanners,
+       IO_AVAILABLE->N_modems,
+       IO_AVAILABLE->N_CDs);
+
+                        break;
+                    }    
 
                     reserveIO(runningProcessPTR, IO_AVAILABLE);
 
@@ -305,9 +317,12 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
             // Process Execution is Complete Branch (Free I/O & Mem Ressources, then Clean-up running process pointer)
             if (runningProcessPTR->allocated_exec_time <= 0)
             {
-                MEMORY_AVAILABLE += runningProcessPTR->proc_size_in_mem;
 
-                freeIO(runningProcessPTR, IO_AVAILABLE);
+
+                //! PROCESS IS OVER, FREE MEM & I/O RESSOURCES
+
+                MEMORY_AVAILABLE += runningProcessPTR->proc_size_in_mem;
+                freeIO(runningProcessPTR, IO_AVAILABLE); 
 
                 printWrap(MILLISEC_COUNT, currentProcessIndex, MEMORY_AVAILABLE,
                           "Priority %d Process Completed", currentProcessIndex);
@@ -322,6 +337,11 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
 
                 if (runningProcessPTR->priority.quantum == 0 && currentProcessIndex < 3)
                 {
+                    
+                //! PROCESS IS SWITCHING QUEUES, but runningProcessPtr is a Priority N. element, so moving it to N-1 requires freeing and re-allocing 
+                //! of IO
+
+                freeIO(runningProcessPTR, IO_AVAILABLE); 
 
                     // Demote process to a lower priority queue if the quantum expires
                     printWrap(MILLISEC_COUNT, currentProcessIndex, MEMORY_AVAILABLE,
@@ -343,7 +363,7 @@ int simulateDispatcher(ProcSimulation *JobDispatchlist, int *count)
 
         MILLISEC_COUNT++;
 
-        if(MILLISEC_COUNT > 1000) { //! Emergency Break Condition (for debug & Safety)
+        if(MILLISEC_COUNT > 60) { //! Emergency Break Condition (for debug & Safety)
             ACTIVE_TASKS_COUNT = 0;
         }
         usleep(1000); // Wait for 1 millisecond before the next iteration
