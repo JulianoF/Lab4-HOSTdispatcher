@@ -2,7 +2,9 @@
 #include <unistd.h> // For usleep
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
+#define MEMORY_MAX 1024;
 
 //From Lab 4 doc: 2)
 
